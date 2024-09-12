@@ -19,7 +19,7 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
 
-    MovieApp.print_title("Welcome to the movie database")
+    MovieApp._print_title("Welcome to the movie database")
 
     # Check if the filename is provided
     if args.file:
