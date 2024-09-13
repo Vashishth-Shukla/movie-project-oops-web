@@ -68,9 +68,10 @@ class StorageCsv(IStorage):
     def delete_movie(self, title):
         """Deletes a movie by title from the CSV file."""
         movies = self._read_data()
-        if title in movies:
-            del movies[title]
-            self._write_data(movies)
+        if title.lower() in (key.lower() for key in movies.keys()):
+            lowercase_movies = {key.lower(): key for key in movies}
+            title_in_db = lowercase_movies.get(title.lower())
+            del movies[title_in_db]
             print(f"Movie '{title}' deleted successfully.")
         else:
             print(f"Movie '{title}' not found in the database.")

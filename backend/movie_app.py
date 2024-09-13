@@ -2,17 +2,20 @@ import os
 import random
 import sys
 
+import requests
 from colorama import Fore, init
-from rapidfuzz import fuzz, process  # pip install rapidfuzz
-
-from storage.storage_csv import StorageCsv
-from storage.storage_json import StorageJson
+from dotenv import load_dotenv
+from rapidfuzz import fuzz, process
 
 init(autoreset=True)
+ENV_LOADED = load_dotenv("backend/.env")
+URI = r"http://www.omdbapi.com/?"
 
 
 class MovieApp:
 
+    INDEX_TEMPLATE_PATH = "templates/index_template.html"
+    MOVIE_TEMPLATE_PATH = "templates/movie_li.html"
     MAIN_MENU_ITEMS = [
         "Exit My Movies Database",
         "List movies",
@@ -23,13 +26,40 @@ class MovieApp:
         "Random movie",
         "Search movie",
         "Movies sorted by rating",
+        "Create Website",
     ]
 
     def __init__(self, storage) -> None:
         self.storage = storage
 
-    def _get_movie_rating(self):
-        """Get a valid movie rating from the user."""
+    def _get_movie_poster_manually():
+        return input("Please enter a valid url to the movie poster:")
+
+    def _get_movie_details(self, movie_name):
+        """Make API call to "https://www.omdbapi.com/" to get the details of the movie."""
+        movie_details = {}
+
+        try:
+            request_uri = URI + os.getenv("API_KEY") + f"&t={movie_name}"
+            movie_details = requests.get(request_uri).json()
+            if movie_details["Response"]:
+                movie_name = movie_details["Title"]
+                year = movie_details["Year"]
+                rating = movie_details["imdbRating"]
+                poster = movie_details["Poster"]
+            else:
+                print(Fore.RED + "Movie details not found!")
+
+        except Exception as e:
+            print(Fore.RED + f"Error: {e}")
+            print(Fore.YELLOW + "We will get the details manually.")
+            year = self._get_movie_year_manually()
+            rating = self._get_movie_rating_manually()
+            poster = self._get_movie_poster_manually()
+
+        return movie_name, year, rating, poster
+
+    def _get_movie_rating_manually(self):
         while True:
             try:
                 rating = float(input(Fore.YELLOW + "Enter movie rating (0-10): "))
@@ -44,13 +74,22 @@ class MovieApp:
                     Fore.RED + "Invalid input. Please enter a number between 0 and 10."
                 )
 
+    def _get_movie_year_manually(self, movie_name):
+        while True:
+            year = input(Fore.YELLOW + "Enter movie release year: ")
+            try:
+                year = int(year)  # Try to convert the input to an integer
+                print(f"Valid year entered: {year}")
+                return year
+            except ValueError:
+                print("Invalid input! Please enter a valid year.")
+
     def _add_movie(self):
         """Add a new movie to the database."""
         movie_name = input(Fore.YELLOW + "Enter new movie name: ")
-        year = input(Fore.YELLOW + "Enter movie release year: ")
-        rating = self._get_movie_rating()
-        poster = input(Fore.YELLOW + "Enter poster URL (optional): ")
+        movie_name, year, rating, poster = self._get_movie_details(movie_name)
         self.storage.add_movie(movie_name, year, rating, poster)
+        print(Fore.GREEN + f"{movie_name} added.")
 
     def _delete_movie(self):
         """Delete a movie from the database."""
@@ -60,7 +99,7 @@ class MovieApp:
     def _update_movie(self):
         """Update the rating of an existing movie."""
         movie = input(Fore.YELLOW + "\nEnter the movie to update: ")
-        new_rating = self._get_movie_rating()
+        new_rating = self._get_movie_rating_manually(movie)
         self.storage.update_movie(movie, new_rating)
 
     def _average_rating(self, movies):
@@ -160,6 +199,42 @@ class MovieApp:
             print(Fore.RED + "No movies found.")
         input(Fore.GREEN + "\nPress Enter to continue...")
 
+    def _create_website(self):
+        # Step 1: Read the template files
+        with open(MovieApp.INDEX_TEMPLATE_PATH, "r") as index_file:
+            index_template = index_file.read()
+
+        with open(MovieApp.MOVIE_TEMPLATE_PATH, "r") as movie_li_file:
+            movie_li_template = movie_li_file.read()
+
+        # Step 2: Get all movies from storage
+        movies = self.storage.list_movies()
+
+        # Step 3: Generate the movie list items
+        movie_list_items = ""
+        for title, details in movies.items():
+            # Replace placeholders in movie_li.html with actual movie details
+            movie_li = movie_li_template.replace(
+                "--movie-poster-link--", details["poster"]
+            )
+            movie_li = movie_li.replace("--movie-name--", title)
+            movie_li = movie_li.replace("--movie-year--", details["year"])
+            movie_list_items += movie_li
+
+        # Step 4: Replace placeholders in index template
+        index_content = index_template.replace(
+            "__TEMPLATE_TITLE__", "My Movie Collection"
+        )
+        index_content = index_content.replace(
+            "__TEMPLATE_MOVIE_GRID__", movie_list_items
+        )
+
+        # Step 5: Write the final HTML content to index.html
+        with open("index.html", "w") as output_file:
+            output_file.write(index_content)
+
+        print(Fore.GREEN + "Website created successfully!")
+
     def _function_handler(self, choice):
         """Handle the user's menu choice."""
         if choice == "0":
@@ -180,6 +255,8 @@ class MovieApp:
             self._search_movie()
         elif choice == "8":
             self._sort_by_rating()
+        elif choice == "9":
+            self._create_website()
         else:
             print(Fore.RED + "\nIncorrect input. Please try again\n")
 
@@ -199,7 +276,7 @@ class MovieApp:
     @classmethod
     def _confirm_use_existing_file(cls, file_name):
         while True:
-            selection = input("Would you like to use the existing file? (y/n):")
+            selection = input("Would you like to use the existing file? (y/n): ")
             if selection.lower() == "y":
                 return file_name
             elif selection.lower() == "n":
@@ -217,12 +294,13 @@ class MovieApp:
         if os.path.exists(os.path.join("data", file_name)):
             print(f"The file {file_name} exists.")
             file_name = MovieApp._confirm_use_existing_file(file_name)
-            return file_name
+        return file_name
 
     @classmethod
     def get_file_name(cls):
         while True:
-            file_name = input("Please enter a file name ending with .csv or .json:")
+            file_name = input("Please enter a file name ending with .csv or .json: ")
+
             if file_name.endswith((".csv", ".json")):
                 file_name = MovieApp._file_exists(file_name)
                 return file_name
@@ -237,6 +315,7 @@ class MovieApp:
         else:
             print("Only csv and json files are supported.")
             file_name = MovieApp.get_file_name()
+            return file_name
 
     @classmethod
     def _print_title(cls, msg):

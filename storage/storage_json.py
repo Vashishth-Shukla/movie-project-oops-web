@@ -12,9 +12,10 @@ class StorageJson(IStorage):
 
     def _read_data(self):
         """Reads the existing movie data from the file."""
+        movies = {}
         try:
             with open(self._file_path, "r") as file:
-                movies = lambda: json.load(file) if json.load(file) is not None else {}
+                movies = json.load(file)
         except FileNotFoundError:
             movies = {}  # Initialize with an empty dictionary if file not found
         return movies
@@ -32,7 +33,7 @@ class StorageJson(IStorage):
     def add_movie(self, title, year, rating, poster=None):
         """Adds a new movie to the JSON file."""
         movies = self._read_data()  # Read the current movies data
-        if title in movies:
+        if title in movies.keys():
             print(f"Movie '{title}' already exists in the database.")
             return  # no further actions required
         else:
@@ -45,8 +46,10 @@ class StorageJson(IStorage):
     def delete_movie(self, title):
         """Deletes a movie by title from the JSON file."""
         movies = self._read_data()
-        if title in movies:
-            del movies[title]
+        if title.lower() in (key.lower() for key in movies.keys()):
+            lowercase_movies = {key.lower(): key for key in movies}
+            title_in_db = lowercase_movies.get(title.lower())
+            del movies[title_in_db]
             self._write_data(movies)
             print(f"Movie '{title}' deleted successfully.")
         else:
