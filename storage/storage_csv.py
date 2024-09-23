@@ -79,10 +79,12 @@ class StorageCsv(IStorage):
     def update_movie(self, title, rating):
         """Updates the rating of an existing movie."""
         movies = self._read_data()
-        if title in movies:
-            movies[title]["rating"] = rating
+        if title.lower() in [movie.lower() for movie in movies.keys()]:
+            lowercase_movies = {key.lower(): key for key in movies}
+            matched_title = lowercase_movies.get(title.lower())
+            movies[matched_title]["rating"] = rating
             self._write_data(movies)
-            print(f"Movie '{title}' rating updated to {rating}.")
+            print(f"Movie '{matched_title}' rating updated to {rating}.")
         else:
             print(f"Movie '{title}' not found in the database.")
 
